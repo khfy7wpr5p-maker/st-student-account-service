@@ -27,6 +27,7 @@ export function createStudentAccountRouter({
   revokeInvitationService,
   acceptInvitationService = null,
   recordStudentSessionService = null,
+  listTeacherStudentsService = null,
 } = {}) {
   const verifier = assertTokenVerifier(tokenVerifier)
   const teachers = assertTeacherIdentityResolver(teacherIdentityResolver)
@@ -39,6 +40,9 @@ export function createStudentAccountRouter({
   const recordStudentSession = recordStudentSessionService === null
     ? null
     : assertService(recordStudentSessionService, 'recordStudentSessionService')
+  const listTeacherStudents = listTeacherStudentsService === null
+    ? null
+    : assertService(listTeacherStudentsService, 'listTeacherStudentsService')
 
   async function authenticatedUser(request) {
     const bearerToken = readBearerToken(request)
@@ -94,6 +98,14 @@ export function createStudentAccountRouter({
       invitationLink: result.invitationLink,
     })
   }))
+
+  if (listTeacherStudents) {
+    router.get('/api/student-accounts/v1/teacher/students', asyncRoute(async (request, response) => {
+      const teacherId = await authenticatedTeacherId(request)
+      const students = await listTeacherStudents.execute({ teacherId })
+      response.status(200).json({ students })
+    }))
+  }
 
   router.post('/api/student-accounts/v1/teacher/invitations/:inviteId/revoke', asyncRoute(async (request, response) => {
     const teacherId = await authenticatedTeacherId(request)
