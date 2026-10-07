@@ -25,23 +25,29 @@ export function createStudentAccountRouter({
   createInvitationService,
   resolveInvitationService,
   revokeInvitationService,
+  acceptInvitationService = null,
 } = {}) {
   const verifier = assertTokenVerifier(tokenVerifier)
   const teachers = assertTeacherIdentityResolver(teacherIdentityResolver)
   const createInvitation = assertService(createInvitationService, 'createInvitationService')
   const resolveInvitation = assertService(resolveInvitationService, 'resolveInvitationService')
   const revokeInvitation = assertService(revokeInvitationService, 'revokeInvitationService')
+  const acceptInvitation = acceptInvitationService === null
+    ? null
+    : assertService(acceptInvitationService, 'acceptInvitationService')
 
-  async function authenticatedTeacherId(request) {
+  async function authenticatedUser(request) {
     const bearerToken = readBearerToken(request)
-    let authenticatedUser
     try {
-      authenticatedUser = await verifier.verifyIdToken(bearerToken)
+      return await verifier.verifyIdToken(bearerToken)
     } catch {
       throw boundaryError('UNAUTHORIZED')
     }
+  }
 
-    const mapping = await teachers.resolveTeacher(authenticatedUser.uid)
+  async function authenticatedTeacherId(request) {
+    const authenticated = await authenticatedUser(request)
+    const mapping = await teachers.resolveTeacher(authenticated.uid)
     if (!mapping || mapping.active !== true) {
       throw boundaryError('FORBIDDEN')
     }
@@ -89,11 +95,21 @@ export function createStudentAccountRouter({
     const teacherId = await authenticatedTeacherId(request)
     const inviteId = normalizeRequiredId(request.params.inviteId, 'inviteId')
     const result = await revokeInvitation.execute({ teacherId, inviteId })
-    response.status(200).json({
-      inviteId: result.inviteId,
-      status: result.status,
-    })
+    response.status(200).json({ inviteId: result.inviteId, status: result.status })
   }))
+
+  if (acceptInvitation) {
+    router.post('/api/student-accounts/v1/student/invitations/accept', asyncRoute(async (request, response) => {
+      const authenticated = await authenticatedUser(request)
+      assertStrictInputObject(request.body, ['inviteToken'], 'accept invitation request')
+      const rawToken = normalizeRequiredText(request.body.inviteToken, 'inviteToken', 2048)
+      const result = await acceptInvitation.execute({ rawToken, authenticatedUser: authenticated })
+      response.status(200).json({
+        studentId: result.studentId,
+        relationshipState: result.relationshipState,
+      })
+    }))
+  }
 
   router.use((error, _request, response, _next) => {
     const { status, body } = toHttpError(error)
