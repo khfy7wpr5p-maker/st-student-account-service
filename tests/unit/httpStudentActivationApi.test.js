@@ -43,7 +43,13 @@ function dependencies() {
   }
 }
 
-async function post(baseUrl, { token = 'Bearer good-token', body = { inviteToken: 'raw-invite-secret' } } = {}) {
+async function post(baseUrl, options = {}) {
+  const token = Object.prototype.hasOwnProperty.call(options, 'token')
+    ? options.token
+    : 'Bearer good-token'
+  const body = Object.prototype.hasOwnProperty.call(options, 'body')
+    ? options.body
+    : { inviteToken: 'raw-invite-secret' }
   const headers = { 'content-type': 'application/json' }
   if (token !== undefined) headers.authorization = token
   const response = await fetch(`${baseUrl}/api/student-accounts/v1/student/invitations/accept`, {
