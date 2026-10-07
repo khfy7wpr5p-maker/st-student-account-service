@@ -1,0 +1,1 @@
+export function assertTeacherIdentityResolver(resolver){if(!resolver||typeof resolver!=='object'||typeof resolver.resolveTeacher!=='function')throw new TypeError('teacher identity resolver must provide resolveTeacher().');return resolver}

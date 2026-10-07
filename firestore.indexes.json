@@ -1,0 +1,7 @@
+{
+  "indexes": [
+    {"collectionGroup":"studentInvitations","queryScope":"COLLECTION","fields":[{"fieldPath":"teacherId","order":"ASCENDING"},{"fieldPath":"emailNormalized","order":"ASCENDING"},{"fieldPath":"status","order":"ASCENDING"}]},
+    {"collectionGroup":"teacherStudentRelationships","queryScope":"COLLECTION","fields":[{"fieldPath":"teacherId","order":"ASCENDING"},{"fieldPath":"active","order":"ASCENDING"}]}
+  ],
+  "fieldOverrides": []
+}

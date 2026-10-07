@@ -1,0 +1,1 @@
+export function assertUsageRepository(repository){const methods=['recordSessionOnce','getSummary'];if(!repository||typeof repository!=='object')throw new TypeError('usage repository must be an object.');for(const method of methods)if(typeof repository[method]!=='function')throw new TypeError(`usage repository must provide ${method}().`);return repository}

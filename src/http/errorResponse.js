@@ -1,0 +1,6 @@
+export class PublicHttpError extends Error { constructor(statusCode,code){super(code);this.name='PublicHttpError';this.statusCode=statusCode;this.code=code} }
+export const invalidRequest=()=>new PublicHttpError(400,'INVALID_REQUEST')
+export const unauthorized=()=>new PublicHttpError(401,'UNAUTHORIZED')
+export const forbidden=()=>new PublicHttpError(403,'FORBIDDEN')
+export function toPublicError(error){if(error instanceof PublicHttpError)return Object.freeze({statusCode:error.statusCode,body:Object.freeze({error:error.code})});const message=String(error?.message??'').toLowerCase();if(/forbidden|owner mismatch/.test(message))return Object.freeze({statusCode:403,body:Object.freeze({error:'FORBIDDEN'})});if(/not found/.test(message))return Object.freeze({statusCode:404,body:Object.freeze({error:'NOT_FOUND'})});if(/pending|conflict|expired|revoked|ambiguous|not pending/.test(message))return Object.freeze({statusCode:409,body:Object.freeze({error:'CONFLICT'})});if(error instanceof TypeError||/invalid|unsupported|must be|required/.test(message))return Object.freeze({statusCode:400,body:Object.freeze({error:'INVALID_REQUEST'})});return Object.freeze({statusCode:500,body:Object.freeze({error:'INTERNAL_ERROR'})})}
+export function sendPublicError(res,error){const mapped=toPublicError(error);return res.status(mapped.statusCode).json(mapped.body)}

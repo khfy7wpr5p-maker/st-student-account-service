@@ -1,0 +1,2 @@
+import { normalizeEmail, normalizeRequiredId } from '../../domain/validation.js'
+export function createFirebaseTokenVerifier({auth}={}){if(!auth||typeof auth.verifyIdToken!=='function')throw new TypeError('Firebase Auth adapter requires verifyIdToken().');return Object.freeze({async verifyIdToken(token){const decoded=await auth.verifyIdToken(token);return Object.freeze({uid:normalizeRequiredId(decoded?.uid,'uid'),email:normalizeEmail(decoded?.email,'email')})}})}

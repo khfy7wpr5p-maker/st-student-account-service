@@ -1,0 +1,1 @@
+export function assertTokenVerifier(verifier){if(!verifier||typeof verifier!=='object'||typeof verifier.verifyIdToken!=='function')throw new TypeError('token verifier must provide verifyIdToken().');return verifier}

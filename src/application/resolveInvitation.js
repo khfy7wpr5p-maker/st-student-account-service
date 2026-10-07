@@ -1,0 +1,7 @@
+import { expireStudentInvitation } from '../domain/studentInvitation.js'
+import { normalizeRequiredText } from '../domain/validation.js'
+import { assertInvitationRepository } from '../ports/invitationRepository.js'
+import { assertAuthDirectory } from '../ports/authDirectory.js'
+import { assertClock } from '../ports/clock.js'
+import { assertTokenGenerator } from '../ports/tokenGenerator.js'
+export function resolveInvitationService({repository,authDirectory,clock,tokenGenerator}={}){const repo=assertInvitationRepository(repository);const directory=assertAuthDirectory(authDirectory);const trustedClock=assertClock(clock);const tokens=assertTokenGenerator(tokenGenerator);return Object.freeze({async execute({rawToken}={}){const secret=normalizeRequiredText(rawToken,'rawToken',2048);const row=await repo.findByTokenHash(tokens.hashInviteToken(secret));if(!row)throw new Error('invitation not found');if(row.status!=='PENDING')throw new Error(`invitation is not PENDING: ${row.status}`);const now=trustedClock.now();if(now>=row.expiresAt){const expired=expireStudentInvitation(row,now);await repo.replace(row,expired);throw new Error('invitation expired')}const accountMode=(await directory.accountExistsByEmail(row.emailNormalized))?'SIGN_IN':'CREATE';return Object.freeze({inviteId:row.inviteId,studentDisplayNameOrNickname:row.studentDisplayNameOrNickname,email:row.emailNormalized,expiresAt:row.expiresAt,accountMode})}})}

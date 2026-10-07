@@ -1,0 +1,15 @@
+{
+  "rules": {
+    "presence": {
+      "$uid": {
+        ".read": false,
+        ".write": "auth != null && auth.uid === $uid",
+        "connections": {"$connectionId": {".validate": "newData.val() === true || !newData.exists()"}},
+        "lastOnlineAt": {".validate": "newData.isNumber() || !newData.exists()"},
+        "$other": {".validate": false}
+      }
+    },
+    ".read": false,
+    ".write": false
+  }
+}
