@@ -50,6 +50,12 @@ export function createFirestoreStudentAccountRepository({ db } = {}) {
       return account
     },
 
+    async getByStudentId(studentId) {
+      const account = snapshotRecord(await accounts.doc(studentId).get())
+      if (account && account.studentId !== studentId) throw new Error('student-account-conflict')
+      return account
+    },
+
     async createActivating(record) {
       assertRecord(record)
       const accountRef = accounts.doc(record.studentId)

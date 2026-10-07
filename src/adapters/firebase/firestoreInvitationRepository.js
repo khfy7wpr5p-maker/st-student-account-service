@@ -92,6 +92,11 @@ export function createFirestoreInvitationRepository({ db } = {}) {
       return snapshotRecord(snapshot.docs[0])
     },
 
+    async listByTeacherId(teacherId) {
+      const snapshot = await invitations.where('teacherId', '==', teacherId).get()
+      return Object.freeze(snapshot.docs.map(snapshotRecord))
+    },
+
     async getById(inviteId) {
       return snapshotRecord(await invitations.doc(inviteId).get())
     },

@@ -85,6 +85,10 @@ export function createFirestoreUsageRepository({ db } = {}) {
   const usage = firestore.collection('studentUsage')
 
   return Object.freeze({
+    async getSummary(studentId) {
+      return summaryFromSnapshot(await usage.doc(studentId).get(), studentId)
+    },
+
     async recordSessionOnce(input) {
       const session = createStudentUsageSession(input)
       const summaryRef = usage.doc(session.studentId)
