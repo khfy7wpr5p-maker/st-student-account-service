@@ -20,5 +20,5 @@ jobs:
           java-version: '21'
       - run: npm install --no-audit --no-fund
       - run: npm test
-      - run: npx firebase emulators:exec --project demo-st-student-account --only auth,firestore "node --test tests/emulator/firestoreRepositories.test.js tests/emulator/firestoreRules.test.js tests/emulator/firestoreUsage.test.js"
+      - run: npx firebase emulators:exec --project demo-st-student-account --only auth,firestore "node --test tests/emulator/firestoreRepositories.test.js tests/emulator/firestoreRules.test.js tests/emulator/firestoreUsage.test.js tests/emulator/firestoreReadModelRepositories.test.js"
       - run: npx firebase emulators:exec --project demo-st-student-account --only auth,database "node --test tests/emulator/realtimePresenceRules.test.js"
