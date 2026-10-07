@@ -26,6 +26,7 @@ export function createStudentAccountRouter({
   resolveInvitationService,
   revokeInvitationService,
   acceptInvitationService = null,
+  recordStudentSessionService = null,
 } = {}) {
   const verifier = assertTokenVerifier(tokenVerifier)
   const teachers = assertTeacherIdentityResolver(teacherIdentityResolver)
@@ -35,6 +36,9 @@ export function createStudentAccountRouter({
   const acceptInvitation = acceptInvitationService === null
     ? null
     : assertService(acceptInvitationService, 'acceptInvitationService')
+  const recordStudentSession = recordStudentSessionService === null
+    ? null
+    : assertService(recordStudentSessionService, 'recordStudentSessionService')
 
   async function authenticatedUser(request) {
     const bearerToken = readBearerToken(request)
@@ -107,6 +111,22 @@ export function createStudentAccountRouter({
       response.status(200).json({
         studentId: result.studentId,
         relationshipState: result.relationshipState,
+      })
+    }))
+  }
+
+  if (recordStudentSession) {
+    router.post('/api/student-accounts/v1/student/sessions', asyncRoute(async (request, response) => {
+      const bearerToken = readBearerToken(request)
+      assertStrictInputObject(request.body, ['clientSessionId'], 'record student session request')
+      const result = await recordStudentSession.execute({
+        bearerToken,
+        clientSessionId: request.body.clientSessionId,
+      })
+      response.status(200).json({
+        isNew: result.isNew,
+        totalSessions: result.totalSessions,
+        lastSessionAt: result.lastSessionAt,
       })
     }))
   }
