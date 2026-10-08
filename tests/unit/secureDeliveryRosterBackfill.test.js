@@ -96,6 +96,35 @@ test('backfill fails closed when an active relationship has no matching active s
   assert.equal(activationCalls, 0)
 })
 
+test('backfill rejects more than one missing legacy roster before any authority write', async () => {
+  let accountReads = 0
+  let activationCalls = 0
+  await assert.rejects(
+    () => backfillSecureDeliveryRoster({
+      listActiveRelationships: async () => [
+        relationship(),
+        relationship({
+          relationshipId: 'relationship-b',
+          studentId: 'student-b',
+          displayNameOrNickname: 'Berk',
+          sourceInviteId: 'invite-b',
+        }),
+      ],
+      hasRosterEntry: async () => false,
+      getStudentAccount: async () => {
+        accountReads += 1
+        return account()
+      },
+      activateStudent: async () => {
+        activationCalls += 1
+      },
+    }),
+    /backfill-scope-exceeded/,
+  )
+  assert.equal(accountReads, 0)
+  assert.equal(activationCalls, 0)
+})
+
 test('production backfill runner is a strict no-op unless the explicit flag equals 1', async () => {
   let adminAccessCalls = 0
   const result = await runSecureDeliveryRosterBackfill({
