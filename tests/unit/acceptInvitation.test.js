@@ -83,6 +83,14 @@ test('first acceptance creates one stable student, activates authority, relation
   assert.equal(result.studentId, 'student-1')
   assert.equal(result.invitation.status, 'ACCEPTED')
   assert.equal(system.authority.calls.length, 1)
+  assert.deepEqual(system.authority.calls[0], {
+    firebaseUid: 'firebase-student-a',
+    teacherId: 'teacher-a',
+    studentId: 'student-1',
+    displayNameOrNickname: 'Ayşe',
+    activatedAt: '2026-10-07T19:00:00.000Z',
+    sourceInviteId: 'invite-a',
+  })
   assert.equal(system.accounts.snapshot().length, 1)
   assert.equal(system.accounts.snapshot()[0].active, true)
   assert.equal(system.relationships.snapshot().length, 1)
