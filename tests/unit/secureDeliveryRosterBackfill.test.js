@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { backfillSecureDeliveryRoster } from '../../src/maintenance/backfillSecureDeliveryRoster.js'
+import { runSecureDeliveryRosterBackfill } from '../../src/maintenance/runSecureDeliveryRosterBackfill.js'
 
 function relationship(overrides = {}) {
   return Object.freeze({
@@ -93,4 +94,25 @@ test('backfill fails closed when an active relationship has no matching active s
     /backfill-student-account-unavailable/,
   )
   assert.equal(activationCalls, 0)
+})
+
+test('production backfill runner is a strict no-op unless the explicit flag equals 1', async () => {
+  let adminAccessCalls = 0
+  const result = await runSecureDeliveryRosterBackfill({
+    env: {
+      ACCOUNT_SERVICE_SECURE_DELIVERY_ROSTER_BACKFILL: '0',
+    },
+    createAdminAccess() {
+      adminAccessCalls += 1
+      throw new Error('must-not-open-admin-access')
+    },
+  })
+
+  assert.deepEqual(result, {
+    enabled: false,
+    scanned: 0,
+    repaired: 0,
+    skipped: 0,
+  })
+  assert.equal(adminAccessCalls, 0)
 })
