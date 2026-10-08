@@ -1,0 +1,3 @@
+import { assertStrictInputObject, normalizeEmail, normalizeRequiredId, normalizeTimestamp, requireBoolean } from './validation.js'
+export const STUDENT_ACCOUNT_SCHEMA_VERSION = 1
+export function createStudentAccount(input = {}) { assertStrictInputObject(input,['studentId','firebaseUid','email','createdAt','active'],'StudentAccount'); return Object.freeze({ schemaVersion: STUDENT_ACCOUNT_SCHEMA_VERSION, studentId: normalizeRequiredId(input.studentId,'studentId'), firebaseUid: normalizeRequiredId(input.firebaseUid,'firebaseUid'), emailNormalized: normalizeEmail(input.email), createdAt: normalizeTimestamp(input.createdAt,'createdAt'), active: requireBoolean(input.active,'active') }) }

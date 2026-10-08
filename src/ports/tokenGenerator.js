@@ -1,0 +1,1 @@
+export function assertTokenGenerator(generator) { if (!generator || typeof generator !== 'object') throw new TypeError('token generator must be an object.'); for (const method of ['createInviteToken','hashInviteToken','createDomainId']) { if (typeof generator[method] !== 'function') throw new TypeError(`token generator must provide ${method}().`) } return generator }
