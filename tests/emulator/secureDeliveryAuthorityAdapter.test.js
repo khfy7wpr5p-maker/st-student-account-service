@@ -13,6 +13,7 @@ const COLLECTIONS = [
   'identityMappings',
   'identityDomainBindings',
   'teacherStudentGrants',
+  'studentRoster',
   'secureDeliveryProvisioningAudit',
 ]
 
@@ -88,6 +89,7 @@ function activation(overrides = {}) {
     firebaseUid: 'firebase-student-a',
     teacherId: 'teacher-a',
     studentId: 'student-a',
+    displayNameOrNickname: 'Ayşe',
     activatedAt: '2026-10-08T09:45:00.000Z',
     sourceInviteId: 'invite-a',
     ...overrides,
@@ -103,7 +105,7 @@ function assertFingerprint(value) {
   assert.match(value, /^[a-f0-9]{64}$/)
 }
 
-test('adapter activates existing Secure Delivery STUDENT identity binding and teacher grant atomically', async () => {
+test('adapter activates existing Secure Delivery STUDENT identity binding, teacher grant, and roster projection atomically', async () => {
   await seedTeacherAuthority()
   const { createFirestoreSecureDeliveryAuthorityPort } = await loadAdapter()
   const authority = createFirestoreSecureDeliveryAuthorityPort({ db })
@@ -149,6 +151,15 @@ test('adapter activates existing Secure Delivery STUDENT identity binding and te
       revokedAt: null,
     },
   )
+  assert.deepEqual(
+    (await db.collection('studentRoster').doc(documentId('student-a')).get()).data(),
+    {
+      schemaVersion: 1,
+      studentId: 'student-a',
+      displayNameOrNickname: 'Ayşe',
+      active: true,
+    },
+  )
 
   const identityAudit = await auditFor('invite-a', 'CREATE_IDENTITY')
   assert.equal(identityAudit.schemaVersion, 1)
@@ -179,7 +190,7 @@ test('adapter activates existing Secure Delivery STUDENT identity binding and te
   assertFingerprint(grantAudit.afterFingerprint)
 })
 
-test('retry with a later activatedAt converges without rewriting original authority timestamps or audit rows', async () => {
+test('retry with a later activatedAt converges without rewriting original authority timestamps, roster projection, or audit rows', async () => {
   await seedTeacherAuthority()
   const { createFirestoreSecureDeliveryAuthorityPort } = await loadAdapter()
   const authority = createFirestoreSecureDeliveryAuthorityPort({ db })
@@ -204,6 +215,15 @@ test('retry with a later activatedAt converges without rewriting original author
     (await db.collection('teacherStudentGrants').doc(grantId('teacher-a', 'student-a')).get()).data().createdAt,
     '2026-10-08T09:45:00.000Z',
   )
+  assert.deepEqual(
+    (await db.collection('studentRoster').doc(documentId('student-a')).get()).data(),
+    {
+      schemaVersion: 1,
+      studentId: 'student-a',
+      displayNameOrNickname: 'Ayşe',
+      active: true,
+    },
+  )
   const replayAudit = await db.collection('secureDeliveryProvisioningAudit').get()
   assert.equal(firstAudit.size, 2)
   assert.equal(replayAudit.size, 2)
@@ -211,7 +231,7 @@ test('retry with a later activatedAt converges without rewriting original author
   assert.equal((await auditFor('invite-a', 'CREATE_GRANT')).timestamp, '2026-10-08T09:45:00.000Z')
 })
 
-test('concurrent exact activation converges to one authority state and one audit pair', async () => {
+test('concurrent exact activation converges to one authority state, one roster projection, and one audit pair', async () => {
   await seedTeacherAuthority()
   const { createFirestoreSecureDeliveryAuthorityPort } = await loadAdapter()
   const authority = createFirestoreSecureDeliveryAuthorityPort({ db })
@@ -224,7 +244,39 @@ test('concurrent exact activation converges to one authority state and one audit
   assert.deepEqual(left, right)
   assert.equal((await db.collection('identityMappings').where('studentId', '==', 'student-a').get()).size, 1)
   assert.equal((await db.collection('teacherStudentGrants').where('studentId', '==', 'student-a').get()).size, 1)
+  assert.equal((await db.collection('studentRoster').where('studentId', '==', 'student-a').get()).size, 1)
   assert.equal((await db.collection('secureDeliveryProvisioningAudit').get()).size, 2)
+})
+
+test('conflicting existing roster projection fails closed without overwriting it', async () => {
+  await seedTeacherAuthority()
+  await db.collection('studentRoster').doc(documentId('student-a')).set({
+    schemaVersion: 1,
+    studentId: 'student-a',
+    displayNameOrNickname: 'Different Name',
+    active: true,
+  })
+  const { createFirestoreSecureDeliveryAuthorityPort } = await loadAdapter()
+  const authority = createFirestoreSecureDeliveryAuthorityPort({ db })
+
+  await assert.rejects(
+    () => authority.activateStudent(activation()),
+    /roster|conflict/i,
+  )
+  assert.deepEqual(
+    (await db.collection('studentRoster').doc(documentId('student-a')).get()).data(),
+    {
+      schemaVersion: 1,
+      studentId: 'student-a',
+      displayNameOrNickname: 'Different Name',
+      active: true,
+    },
+  )
+  assert.equal(
+    (await db.collection('teacherStudentGrants').doc(grantId('teacher-a', 'student-a')).get()).exists,
+    false,
+  )
+  assert.equal((await db.collection('secureDeliveryProvisioningAudit').get()).size, 0)
 })
 
 test('missing or inactive teacher authority fails closed before student authority is created', async () => {

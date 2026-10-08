@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 
 import {
   normalizeRequiredId,
+  normalizeRequiredText,
   normalizeTimestamp,
 } from '../../domain/validation.js'
 
@@ -9,6 +10,7 @@ const STUDENT_ROLE = 'STUDENT'
 const TEACHER_ROLE = 'TEACHER'
 const OPERATOR_ID = 'st-student-account-service'
 const REASON = 'Account invitation authority activation.'
+const SECURE_DELIVERY_MAX_DISPLAY_NAME_LENGTH = 160
 
 function hashJson(value) {
   return createHash('sha256')
@@ -137,11 +139,39 @@ function assertGrant(grant, { teacherId, studentId }) {
   return grant
 }
 
+function assertRosterProjection(record, expected) {
+  const fields = [
+    'schemaVersion',
+    'studentId',
+    'displayNameOrNickname',
+    'active',
+  ]
+  if (
+    !record ||
+    typeof record !== 'object' ||
+    Array.isArray(record) ||
+    Object.keys(record).length !== fields.length ||
+    !fields.every((field) => Object.prototype.hasOwnProperty.call(record, field)) ||
+    record.schemaVersion !== 1 ||
+    record.studentId !== expected.studentId ||
+    record.displayNameOrNickname !== expected.displayNameOrNickname ||
+    record.active !== true
+  ) {
+    throw new Error('student-roster-conflict')
+  }
+  return record
+}
+
 function normalizeActivation(input = {}) {
   return Object.freeze({
     firebaseUid: normalizeRequiredId(input.firebaseUid, 'firebaseUid'),
     teacherId: normalizeRequiredId(input.teacherId, 'teacherId'),
     studentId: normalizeRequiredId(input.studentId, 'studentId'),
+    displayNameOrNickname: normalizeRequiredText(
+      input.displayNameOrNickname,
+      'displayNameOrNickname',
+      SECURE_DELIVERY_MAX_DISPLAY_NAME_LENGTH,
+    ),
     activatedAt: normalizeTimestamp(input.activatedAt, 'activatedAt'),
     sourceInviteId: normalizeRequiredId(input.sourceInviteId, 'sourceInviteId'),
   })
@@ -228,6 +258,7 @@ export function createFirestoreSecureDeliveryAuthorityPort({ db } = {}) {
   const identities = firestore.collection('identityMappings')
   const bindings = firestore.collection('identityDomainBindings')
   const grants = firestore.collection('teacherStudentGrants')
+  const roster = firestore.collection('studentRoster')
   const audits = firestore.collection('secureDeliveryProvisioningAudit')
 
   return Object.freeze({
@@ -237,11 +268,18 @@ export function createFirestoreSecureDeliveryAuthorityPort({ db } = {}) {
       const studentBindingRef = bindings.doc(bindingId(STUDENT_ROLE, activation.studentId))
       const teacherBindingRef = bindings.doc(bindingId(TEACHER_ROLE, activation.teacherId))
       const grantRef = grants.doc(grantId(activation.teacherId, activation.studentId))
+      const rosterRef = roster.doc(documentId(activation.studentId))
       const identityAuditId = operationId(activation.sourceInviteId, 'CREATE_IDENTITY')
       const grantAuditId = operationId(activation.sourceInviteId, 'CREATE_GRANT')
       const identityAuditRef = audits.doc(documentId(identityAuditId))
       const grantAuditRef = audits.doc(documentId(grantAuditId))
       const stableStudentQuery = identities.where('studentId', '==', activation.studentId)
+      const desiredRoster = Object.freeze({
+        schemaVersion: 1,
+        studentId: activation.studentId,
+        displayNameOrNickname: activation.displayNameOrNickname,
+        active: true,
+      })
 
       await firestore.runTransaction(async (transaction) => {
         const [
@@ -249,6 +287,7 @@ export function createFirestoreSecureDeliveryAuthorityPort({ db } = {}) {
           studentIdentitySnap,
           studentBindingSnap,
           grantSnap,
+          rosterSnap,
           identityAuditSnap,
           grantAuditSnap,
           stableStudentSnaps,
@@ -257,6 +296,7 @@ export function createFirestoreSecureDeliveryAuthorityPort({ db } = {}) {
           transaction.get(studentIdentityRef),
           transaction.get(studentBindingRef),
           transaction.get(grantRef),
+          transaction.get(rosterRef),
           transaction.get(identityAuditRef),
           transaction.get(grantAuditRef),
           transaction.get(stableStudentQuery),
@@ -319,6 +359,9 @@ export function createFirestoreSecureDeliveryAuthorityPort({ db } = {}) {
         const existingGrant = grantSnap.exists
           ? assertGrant(grantSnap.data(), activation)
           : null
+        if (rosterSnap.exists) {
+          assertRosterProjection(rosterSnap.data(), desiredRoster)
+        }
 
         const identityTimestamp = existingStudentIdentity?.createdAt ?? activation.activatedAt
         const grantTimestamp = existingGrant?.createdAt ?? activation.activatedAt
@@ -375,6 +418,7 @@ export function createFirestoreSecureDeliveryAuthorityPort({ db } = {}) {
         if (!studentIdentitySnap.exists) transaction.set(studentIdentityRef, identity)
         if (!studentBindingSnap.exists) transaction.set(studentBindingRef, studentBinding)
         if (!grantSnap.exists) transaction.set(grantRef, grant)
+        if (!rosterSnap.exists) transaction.set(rosterRef, desiredRoster)
 
         if (!identityAuditSnap.exists) {
           transaction.set(

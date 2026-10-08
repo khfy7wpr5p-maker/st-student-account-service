@@ -138,6 +138,7 @@ export function acceptInvitationService({
         firebaseUid: uid,
         teacherId: invitation.teacherId,
         studentId: account.studentId,
+        displayNameOrNickname: relationship.displayNameOrNickname,
         activatedAt: now,
         sourceInviteId: invitation.inviteId,
       })
