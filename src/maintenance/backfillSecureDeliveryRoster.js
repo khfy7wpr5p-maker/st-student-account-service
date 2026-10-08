@@ -59,6 +59,7 @@ export async function backfillSecureDeliveryRoster({
   getStudentAccount,
   hasRosterEntry,
   activateStudent,
+  maxRepairs = 1,
 } = {}) {
   const listRelationships = requireFunction(
     listActiveRelationships,
@@ -76,22 +77,32 @@ export async function backfillSecureDeliveryRoster({
     activateStudent,
     'activateStudent',
   )
+  if (!Number.isSafeInteger(maxRepairs) || maxRepairs < 1) {
+    throw new TypeError('maxRepairs must be a positive safe integer.')
+  }
 
   const records = await listRelationships()
   if (!Array.isArray(records)) {
     throw new TypeError('listActiveRelationships must return an array.')
   }
 
-  let repaired = 0
+  const missing = []
   let skipped = 0
-
   for (const raw of records) {
     const relationship = assertRelationship(raw)
     if (await rosterExists(relationship.studentId)) {
       skipped += 1
-      continue
+    } else {
+      missing.push(relationship)
     }
+  }
 
+  if (missing.length > maxRepairs) {
+    throw new Error('backfill-scope-exceeded')
+  }
+
+  let repaired = 0
+  for (const relationship of missing) {
     const account = assertAccount(
       await getAccount(relationship.studentId),
       relationship.studentId,
