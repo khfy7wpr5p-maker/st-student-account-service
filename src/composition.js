@@ -15,6 +15,7 @@ import { createFirestoreRelationshipRepository } from './adapters/firebase/fires
 import { createFirestoreStudentAccountRepository } from './adapters/firebase/firestoreStudentAccountRepository.js'
 import { createFirestoreUsageRepository } from './adapters/firebase/firestoreUsageRepository.js'
 import { createRealtimePresenceReader } from './adapters/firebase/realtimePresenceReader.js'
+import { createFirestoreSecureDeliveryAuthorityPort } from './adapters/secureDelivery/firestoreSecureDeliveryAuthorityPort.js'
 import { normalizeRequiredText } from './domain/validation.js'
 import { createStudentAccountRouter } from './http/router.js'
 import { boundaryError } from './http/errorResponse.js'
@@ -29,6 +30,20 @@ function requiredConfigText(value, label) {
 function normalizeMode(value) {
   if (value === undefined || value === null) return 'development'
   return requiredConfigText(value, 'mode').toLowerCase()
+}
+
+function normalizeAuthorityBinding(value) {
+  if (value === undefined || value === null || value === '') return null
+  const normalized = requiredConfigText(
+    value,
+    'secureDeliveryAuthorityBinding',
+  ).toLowerCase()
+  if (normalized !== 'firestore-v1') {
+    throw new TypeError(
+      'Secure Delivery authority binding must be firestore-v1 when configured.',
+    )
+  }
+  return normalized
 }
 
 function defaultClock() {
@@ -121,15 +136,13 @@ export function createStudentAccountService({ config = {}, adapters = {} } = {})
   const mode = normalizeMode(config.mode)
   const projectId = requiredConfigText(config.projectId, 'projectId')
   const invitationBaseUrl = requiredConfigText(config.invitationBaseUrl, 'invitationBaseUrl')
+  const authorityBinding = normalizeAuthorityBinding(config.secureDeliveryAuthorityBinding)
   const logger = normalizeLogger(adapters.logger)
-  const authority = adapters.secureDeliveryAuthorityPort ?? null
-
-  if (mode === 'production' && !authority) {
-    throw new TypeError('SecureDeliveryAuthorityPort is required in production.')
-  }
 
   let adminAccess = adapters.firebaseAdminAccess ?? null
+  let secureDeliveryAdminAccess = adapters.secureDeliveryFirebaseAdminAccess ?? null
   let closed = false
+
   function firebaseAdmin() {
     if (closed) throw new Error('student-account-service-closed')
     if (!adminAccess) {
@@ -141,6 +154,35 @@ export function createStudentAccountService({ config = {}, adapters = {} } = {})
       })
     }
     return adminAccess
+  }
+
+  function secureDeliveryFirebaseAdmin() {
+    if (closed) throw new Error('student-account-service-closed')
+    if (!secureDeliveryAdminAccess) {
+      const secureDeliveryProjectId = config.secureDeliveryProjectId === undefined
+        ? projectId
+        : requiredConfigText(config.secureDeliveryProjectId, 'secureDeliveryProjectId')
+      const baseAppName = config.firebaseAppName === undefined
+        ? 'st-student-account-service'
+        : requiredConfigText(config.firebaseAppName, 'firebaseAppName')
+      secureDeliveryAdminAccess = createFirebaseAdminAccess({
+        projectId: secureDeliveryProjectId,
+        emulator: config.emulator,
+        appName: `${baseAppName}-secure-delivery-authority`,
+      })
+    }
+    return secureDeliveryAdminAccess
+  }
+
+  let authority = adapters.secureDeliveryAuthorityPort ?? null
+  if (!authority && authorityBinding === 'firestore-v1') {
+    authority = createFirestoreSecureDeliveryAuthorityPort({
+      db: secureDeliveryFirebaseAdmin().getFirestore(),
+    })
+  }
+
+  if (mode === 'production' && !authority) {
+    throw new TypeError('SecureDeliveryAuthorityPort is required in production.')
   }
 
   const clock = adapters.clock ?? defaultClock()
@@ -229,8 +271,15 @@ export function createStudentAccountService({ config = {}, adapters = {} } = {})
     async close() {
       if (closed) return
       closed = true
-      if (adminAccess && typeof adminAccess.close === 'function') {
-        await adminAccess.close()
+      const accesses = new Set(
+        [adminAccess, secureDeliveryAdminAccess].filter(Boolean),
+      )
+      adminAccess = null
+      secureDeliveryAdminAccess = null
+      for (const access of accesses) {
+        if (typeof access.close === 'function') {
+          await access.close()
+        }
       }
     },
   })
