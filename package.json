@@ -13,6 +13,7 @@
     "test:emulator:firestore": "firebase emulators:exec --project demo-st-student-account --only auth,firestore \"node --test tests/emulator/firestoreRepositories.test.js tests/emulator/firestoreRules.test.js tests/emulator/firestoreUsage.test.js tests/emulator/firestoreReadModelRepositories.test.js tests/emulator/secureDeliveryAuthorityAdapter.test.js\"",
     "test:emulator:database": "firebase emulators:exec --project demo-st-student-account --only auth,database \"node --test tests/emulator/realtimePresenceRules.test.js\"",
     "test:emulator": "npm run test:emulator:firestore && npm run test:emulator:database",
+    "prestart": "node src/maintenance/runSecureDeliveryRosterBackfill.js",
     "start": "node src/server.js",
     "dev": "node --watch src/server.js"
   },
