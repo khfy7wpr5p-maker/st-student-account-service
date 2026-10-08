@@ -16,6 +16,7 @@ import { createFirestoreStudentAccountRepository } from './adapters/firebase/fir
 import { createFirestoreUsageRepository } from './adapters/firebase/firestoreUsageRepository.js'
 import { createRealtimePresenceReader } from './adapters/firebase/realtimePresenceReader.js'
 import { createFirestoreSecureDeliveryAuthorityPort } from './adapters/secureDelivery/firestoreSecureDeliveryAuthorityPort.js'
+import { createFirestoreSecureDeliveryTeacherIdentityResolver } from './adapters/secureDelivery/firestoreSecureDeliveryTeacherIdentityResolver.js'
 import { normalizeRequiredText } from './domain/validation.js'
 import { createStudentAccountRouter } from './http/router.js'
 import { boundaryError } from './http/errorResponse.js'
@@ -44,6 +45,46 @@ function normalizeAuthorityBinding(value) {
     )
   }
   return normalized
+}
+
+function normalizeAllowedOrigins(value) {
+  if (value === undefined || value === null) return Object.freeze([])
+  if (!Array.isArray(value)) {
+    throw new TypeError('allowedOrigins must be an array.')
+  }
+
+  const origins = []
+  const seen = new Set()
+  for (const item of value) {
+    const raw = requiredConfigText(item, 'allowed origin')
+    let parsed
+    try {
+      parsed = new URL(raw)
+    } catch {
+      throw new TypeError('allowed origin must be a valid URL origin.')
+    }
+    const localHttp =
+      parsed.protocol === 'http:' &&
+      ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)
+    if (
+      (parsed.protocol !== 'https:' && !localHttp) ||
+      parsed.username ||
+      parsed.password ||
+      parsed.pathname !== '/' ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      throw new TypeError('allowed origin must be an HTTPS origin outside localhost.')
+    }
+    if (!seen.has(parsed.origin)) {
+      seen.add(parsed.origin)
+      origins.push(parsed.origin)
+    }
+  }
+  if (origins.length > 8) {
+    throw new TypeError('allowedOrigins may contain at most 8 origins.')
+  }
+  return Object.freeze(origins)
 }
 
 function defaultClock() {
@@ -132,11 +173,40 @@ function privacySafeObservability(logger) {
   }
 }
 
+function strictBrowserCors(allowedOrigins) {
+  const allowed = new Set(allowedOrigins)
+  return (request, response, next) => {
+    const rawOrigin = request.get('origin')
+    if (rawOrigin === undefined) {
+      next()
+      return
+    }
+
+    const origin = String(rawOrigin).trim()
+    if (!allowed.has(origin)) {
+      response.status(403).json({ error: 'FORBIDDEN' })
+      return
+    }
+
+    response.setHeader('Access-Control-Allow-Origin', origin)
+    response.setHeader('Vary', 'Origin')
+    if (request.method === 'OPTIONS') {
+      response.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+      response.setHeader('Access-Control-Allow-Headers', 'Authorization,Content-Type')
+      response.status(204).end()
+      return
+    }
+
+    next()
+  }
+}
+
 export function createStudentAccountService({ config = {}, adapters = {} } = {}) {
   const mode = normalizeMode(config.mode)
   const projectId = requiredConfigText(config.projectId, 'projectId')
   const invitationBaseUrl = requiredConfigText(config.invitationBaseUrl, 'invitationBaseUrl')
   const authorityBinding = normalizeAuthorityBinding(config.secureDeliveryAuthorityBinding)
+  const allowedOrigins = normalizeAllowedOrigins(config.allowedOrigins)
   const logger = normalizeLogger(adapters.logger)
 
   let adminAccess = adapters.firebaseAdminAccess ?? null
@@ -185,6 +255,14 @@ export function createStudentAccountService({ config = {}, adapters = {} } = {})
     throw new TypeError('SecureDeliveryAuthorityPort is required in production.')
   }
 
+  let teacherIdentityResolver = adapters.teacherIdentityResolver ?? null
+  if (!teacherIdentityResolver && authorityBinding === 'firestore-v1') {
+    teacherIdentityResolver = createFirestoreSecureDeliveryTeacherIdentityResolver({
+      db: secureDeliveryFirebaseAdmin().getFirestore(),
+    })
+  }
+  teacherIdentityResolver ??= CLOSED_TEACHER_IDENTITY_RESOLVER
+
   const clock = adapters.clock ?? defaultClock()
   const tokenGenerator = adapters.tokenGenerator ?? defaultTokenGenerator()
   const tokenVerifier = adapters.tokenVerifier ?? createFirebaseTokenVerifier({
@@ -208,7 +286,6 @@ export function createStudentAccountService({ config = {}, adapters = {} } = {})
   const presenceReader = adapters.presenceReader ?? createRealtimePresenceReader({
     database: firebaseAdmin().getDatabase(),
   })
-  const teacherIdentityResolver = adapters.teacherIdentityResolver ?? CLOSED_TEACHER_IDENTITY_RESOLVER
 
   const createInvitation = createInvitationService({
     repository: invitationRepository,
@@ -261,6 +338,7 @@ export function createStudentAccountService({ config = {}, adapters = {} } = {})
   const app = express()
   app.disable('x-powered-by')
   app.use(privacySafeObservability(logger))
+  app.use(strictBrowserCors(allowedOrigins))
   app.get('/health', (_request, response) => {
     response.status(200).json({ status: 'ok' })
   })
