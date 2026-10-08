@@ -22,6 +22,8 @@ export function configFromEnvironment(env = process.env) {
     databaseURL: optionalText(env.FIREBASE_DATABASE_URL),
     invitationBaseUrl: optionalText(env.STUDENT_INVITATION_BASE_URL),
     firebaseAppName: optionalText(env.FIREBASE_APP_NAME),
+    secureDeliveryAuthorityBinding: optionalText(env.SECURE_DELIVERY_AUTHORITY_BINDING),
+    secureDeliveryProjectId: optionalText(env.SECURE_DELIVERY_FIREBASE_PROJECT_ID),
   })
 }
 
