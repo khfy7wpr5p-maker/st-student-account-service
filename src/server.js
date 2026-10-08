@@ -60,6 +60,7 @@ function parsePort(value) {
 }
 
 export function configFromEnvironment(env = process.env) {
+  const allowedOrigins = parseAllowedOrigins(env.ACCOUNT_SERVICE_ALLOWED_ORIGINS)
   return Object.freeze({
     mode: optionalText(env.ACCOUNT_SERVICE_MODE) ?? optionalText(env.NODE_ENV) ?? 'development',
     projectId: optionalText(env.FIREBASE_PROJECT_ID),
@@ -68,7 +69,7 @@ export function configFromEnvironment(env = process.env) {
     firebaseAppName: optionalText(env.FIREBASE_APP_NAME),
     secureDeliveryAuthorityBinding: optionalText(env.SECURE_DELIVERY_AUTHORITY_BINDING),
     secureDeliveryProjectId: optionalText(env.SECURE_DELIVERY_FIREBASE_PROJECT_ID),
-    allowedOrigins: parseAllowedOrigins(env.ACCOUNT_SERVICE_ALLOWED_ORIGINS),
+    ...(allowedOrigins.length > 0 ? { allowedOrigins } : {}),
   })
 }
 
