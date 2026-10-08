@@ -6,6 +6,50 @@ function optionalText(value) {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }
 
+function parseAllowedOrigins(value) {
+  const text = optionalText(value)
+  if (text === undefined) return Object.freeze([])
+
+  const origins = []
+  const seen = new Set()
+  for (const raw of text.split(',')) {
+    const candidate = raw.trim()
+    if (!candidate) continue
+
+    let parsed
+    try {
+      parsed = new URL(candidate)
+    } catch {
+      throw new TypeError('ACCOUNT_SERVICE_ALLOWED_ORIGINS must contain valid origins.')
+    }
+
+    const localHttp =
+      parsed.protocol === 'http:' &&
+      ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)
+    if (
+      (parsed.protocol !== 'https:' && !localHttp) ||
+      parsed.username ||
+      parsed.password ||
+      parsed.pathname !== '/' ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      throw new TypeError('ACCOUNT_SERVICE_ALLOWED_ORIGINS must contain HTTPS origins outside localhost.')
+    }
+
+    const origin = parsed.origin
+    if (!seen.has(origin)) {
+      seen.add(origin)
+      origins.push(origin)
+    }
+  }
+
+  if (origins.length > 8) {
+    throw new TypeError('ACCOUNT_SERVICE_ALLOWED_ORIGINS may contain at most 8 origins.')
+  }
+  return Object.freeze(origins)
+}
+
 function parsePort(value) {
   if (value === undefined || value === null || value === '') return 3000
   const parsed = Number(value)
@@ -24,6 +68,7 @@ export function configFromEnvironment(env = process.env) {
     firebaseAppName: optionalText(env.FIREBASE_APP_NAME),
     secureDeliveryAuthorityBinding: optionalText(env.SECURE_DELIVERY_AUTHORITY_BINDING),
     secureDeliveryProjectId: optionalText(env.SECURE_DELIVERY_FIREBASE_PROJECT_ID),
+    allowedOrigins: parseAllowedOrigins(env.ACCOUNT_SERVICE_ALLOWED_ORIGINS),
   })
 }
 
